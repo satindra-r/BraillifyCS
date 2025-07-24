@@ -209,10 +209,11 @@ internal class Braillify {
 
 			do {
 				foreach (var braille in brailles) {
-					Console.WriteLine(braille);
+					Console.Write(braille);
 					Thread.Sleep(frameDelay);
 				}
 			} while (loop);
+			Console.WriteLine("");
 		}
 		else {
 			try {
@@ -343,10 +344,12 @@ internal class Braillify {
 					if (outPath.Length == 0) {
 						do {
 							foreach (var braille in brailles) {
-								Console.WriteLine(braille);
+								Console.Write(braille);
 								Thread.Sleep(frameDelay);
 							}
 						} while (loop);
+						Console.WriteLine("");
+
 					}
 					else {
 						var braillesString = new StringBuilder();
