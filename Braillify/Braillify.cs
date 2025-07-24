@@ -21,10 +21,6 @@ internal class Braillify {
 		var y = i / (width / 2);
 		output[i] = '⠀';
 
-		/*var rSqSum = 0;
-		var gSqSum = 0;
-		var bSqSum = 0;*/
-
 		for (var j = 0; j < 8; j++) {
 			int dX;
 			int dY;
@@ -49,9 +45,6 @@ internal class Braillify {
 
 
 			if ((grey > brightness * 255) == (invert == 0)) {
-				/*rSqSum += rSqSum;
-				gSqSum += gSqSum;
-				bSqSum += bSqSum;*/
 				output[i] |= (ushort)(1 << j);
 			}
 		}
@@ -156,34 +149,6 @@ internal class Braillify {
 				case 'i':
 					invert = (args[i + 1].ToLower()[0] == 'y');
 					break;
-				/*case 'e':
-					edge = (args[i + 1].toUpperCase().charAt(0) == 'Y');
-					break;
-				case 'c':
-					colour = (args[i + 1].toUpperCase().charAt(0) == 'Y');
-					break;
-				case 'm':
-					switch (args[i + 1].toLowerCase()) {
-						case "min":
-							mode = 0;
-							break;
-						case "rms":
-							mode = 1;
-							break;
-						case "max":
-							mode = 2;
-							break;
-						case "r":
-							mode = 3;
-							break;
-						case "g":
-							mode = 4;
-							break;
-						case "b":
-							mode = 5;
-							break;
-					}
-					break;*/
 				case 'f':
 					frameSelect = int.Parse(args[i + 1]);
 					break;
@@ -213,6 +178,7 @@ internal class Braillify {
 					Thread.Sleep(frameDelay);
 				}
 			} while (loop);
+
 			Console.WriteLine("");
 		}
 		else {
@@ -348,8 +314,8 @@ internal class Braillify {
 								Thread.Sleep(frameDelay);
 							}
 						} while (loop);
-						Console.WriteLine("");
 
+						Console.WriteLine("");
 					}
 					else {
 						var braillesString = new StringBuilder();
