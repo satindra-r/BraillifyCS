@@ -1,17 +1,22 @@
 ﻿using System.Runtime.InteropServices;
 using System.Text;
+using FFMediaToolkit.Decoding;
+using FFMediaToolkit.Graphics;
+using FFMediaToolkit;
 using ILGPU;
 using ILGPU.Runtime;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using ILGPU.Algorithms;
+using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.Formats.Gif;
 using SixLabors.ImageSharp.Processing;
 
 namespace Braillify;
 
 internal class Braillify {
-	private static void Kernel(Index1D i, ArrayView<uint> data, ArrayView<ushort> output, int width, int height,
-		double brightness) {
+	private static void Kernel(Index1D i, ArrayView<Rgba32> data, ArrayView<ushort> output, int width, int height,
+		double brightness, int invert, ushort space) {
 		var x = i % (width / 2);
 		var y = i / (width / 2);
 		output[i] = '⠀';
@@ -34,35 +39,45 @@ internal class Braillify {
 			}
 
 			var colour = data[x * 2 + dX + (y * 4 + dY) * width];
-			var r = (colour >> 16) % (1 << 8);
-			var g = (colour >> 8) % (1 << 8);
-			var b = (colour >> 0) % (1 << 8);
+			var r = colour.R;
+			var g = colour.G;
+			var b = colour.B;
 			var rSq = r * r;
 			var gSq = g * g;
 			var bSq = b * b;
 			var grey = XMath.Sqrt((rSq + gSq + bSq) / 3.0);
 
-			if (grey > brightness * 255) {
+
+			if ((grey > brightness * 255) == (invert == 0)) {
 				/*rSqSum += rSqSum;
 				gSqSum += gSqSum;
 				bSqSum += bSqSum;*/
 				output[i] |= (ushort)(1 << j);
 			}
 		}
+
+		if (output[i] == '⠀') {
+			output[i] = space;
+		}
 	}
 
-	private void Compute(Accelerator a, MemoryBuffer1D<uint, Stride1D.Dense> inputBuff,
-		MemoryBuffer1D<ushort, Stride1D.Dense> outputBuff, int width, int height, double brightness) {
+	private StringBuilder Compute(Accelerator a, MemoryBuffer1D<Rgba32, Stride1D.Dense> inputBuff,
+		MemoryBuffer1D<ushort, Stride1D.Dense> outputBuff, int width, int height, double brightness, bool invert,
+		char space) {
 		var loadedKernel =
-			a.LoadAutoGroupedStreamKernel<Index1D, ArrayView<uint>, ArrayView<ushort>, int, int, double>(Kernel);
+			a.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Rgba32>, ArrayView<ushort>, int, int, double, int, ushort>(
+				Kernel);
 
-		loadedKernel((int)outputBuff.Length, inputBuff.View, outputBuff.View, width, height, brightness);
+
+		loadedKernel((int)outputBuff.Length, inputBuff.View, outputBuff.View, width, height, brightness,
+			invert ? 1 : 0, space);
 
 		a.Synchronize();
 
 		var braille = outputBuff.GetAsArray1D();
 
 		var brailleBuilder = new StringBuilder();
+		brailleBuilder.Append("\e[H");
 
 		for (var i = 0; i < height / 4; i++) {
 			for (var j = 0; j < width / 2; j++) {
@@ -72,28 +87,31 @@ internal class Braillify {
 			brailleBuilder.AppendLine();
 		}
 
-		Console.WriteLine(brailleBuilder);
+		return brailleBuilder;
 	}
 
-	private void Init(uint[] data, int width, int height, double brightness) {
-		var context = Context.Create(builder => builder.AllAccelerators());
+	private StringBuilder Init(Span<Rgba32> data, int width, int height, double brightness, bool invert, char space) {
+		using var context = Context.Create(builder => builder.AllAccelerators());
 		var d = context.GetPreferredDevice(preferCPU: false);
-		var a = d.CreateAccelerator(context);
+		using var a = d.CreateAccelerator(context);
 
 
-		var inputBuff = a.Allocate1D(data);
-		var outputBuff = a.Allocate1D<ushort>(width * height / 8);
+		using var inputBuff = a.Allocate1D<Rgba32>(data.Length);
+		inputBuff.View.BaseView.CopyFromCPU((ReadOnlySpan<Rgba32>)data);
+		using var outputBuff = a.Allocate1D<ushort>(width * height / 8);
 
-		Compute(a, inputBuff, outputBuff, width, height, brightness);
-
-		a.Dispose();
-		context.Dispose();
+		return Compute(a, inputBuff, outputBuff, width, height, brightness, invert, space);
 	}
 
 	public static void Main(string[] args) {
+		var b = new Braillify();
 		var inPath = "";
+		var outPath = "";
 		int width;
 		int height;
+		var invert = false;
+		var frameSelect = 1;
+		var space = '⠀';
 		var brightness = 50 / 100.0;
 
 		var scale = 100.0;
@@ -107,29 +125,30 @@ internal class Braillify {
 				case 'p':
 					inPath = args[i + 1].Replace("\"", "").Replace("'", "");
 					break;
-				/*case 'o':
-					outPath = args[i + 1].replaceAll("\"", "").replaceAll("'", "");
-					break;*/
+				case 'o':
+					outPath = args[i + 1].Replace("\"", "").Replace("'", "");
+					break;
 				case 'd':
 					scale = double.Parse(args[i + 1]);
 					break;
-				/*case 's':
-					switch (args[i + 1].toLowerCase()) {
+				case 's':
+					switch (args[i + 1].ToLower()) {
 						case "space":
 							space = ' ';
 							break;
 						case "blank":
-							space = (char) 10240;
+							space = '⠀';
 							break;
 						case "dot":
-							space = (char) 10241;
+							space = (char)('⠀' + 1);
 							break;
 					}
-				break;*/
-				/*case 'i':
-					invert = (args[i + 1].toUpperCase().charAt(0) == 'Y');
+
 					break;
-				case 'e':
+				case 'i':
+					invert = (args[i + 1].ToLower()[0] == 'y');
+					break;
+				/*case 'e':
 					edge = (args[i + 1].toUpperCase().charAt(0) == 'Y');
 					break;
 				case 'c':
@@ -157,6 +176,9 @@ internal class Braillify {
 							break;
 					}
 					break;*/
+				case 'f':
+					frameSelect = int.Parse(args[i + 1]);
+					break;
 				case 'b':
 					brightness = int.Parse(args[i + 1]) / 100.0;
 					break;
@@ -166,8 +188,16 @@ internal class Braillify {
 			}
 		}
 
+		if (outPath.Length == 0) {
+			Console.WriteLine("\ec");
+		}
+
 		try {
-			var image = Image.Load<Rgba32>(inPath);
+			var image = Image.Load<Rgba32>(inPath, out var format);
+
+			if (format == GifFormat.Instance) {
+				throw new UnknownImageFormatException("");
+			}
 
 			width = (int)(scale * image.Width / 100.0);
 			height = (int)(scale * image.Height / 100.0);
@@ -180,27 +210,139 @@ internal class Braillify {
 			}
 
 			if (width != image.Width || height != image.Height) {
-				image.Mutate(ctx => ctx.Resize(width, height));
+				var width1 = width;
+				var height1 = height;
+				image.Mutate(ctx => ctx.Resize(width1, height1));
 			}
 
-			Span<Rgba32> rgbaSpan;
+			var dataArr = new Rgba32[width * height];
+			var data = new Span<Rgba32>(dataArr);
 
 			if (image.DangerousTryGetSinglePixelMemory(out var memory)) {
-				rgbaSpan = memory.Span;
+				data = memory.Span;
 			}
 			else {
-				rgbaSpan = new Rgba32[image.Width * image.Height];
-				image.CopyPixelDataTo(rgbaSpan);
+				image.CopyPixelDataTo(data);
 			}
 
-			var intSpan = MemoryMarshal.Cast<Rgba32, uint>(rgbaSpan);
-			var data = intSpan.ToArray();
+			if (outPath.Length == 0) {
+				Console.WriteLine(b.Init(data, width, height, brightness, invert, space));
+			}
+			else {
+				File.WriteAllText(outPath, b.Init(data, width, height, brightness, invert, space).ToString());
+			}
+		}
+		catch (UnknownImageFormatException) {
+			try {
+				if (outPath.Length == 0) {
+					Console.WriteLine("Converting Video, hold on for a bit");
+				}
 
-			var b = new Braillify();
-			b.Init(data, image.Width, image.Height, brightness);
+				var brailles = new List<StringBuilder>();
+				FFmpegLoader.FFmpegPath = "/usr/lib";
+				using var file = MediaFile.Open(inPath);
+				var framePick = 0;
+				var frameDelay = 1 / file.Video.Info.AvgFrameRate;
+
+
+				var frameWidth = file.Video.Info.FrameSize.Width;
+				var frameHeight = file.Video.Info.FrameSize.Height;
+
+				width = (int)(scale * frameWidth / 100.0);
+				height = (int)(scale * frameHeight / 100.0);
+
+				Memory<Rgba32> memory;
+
+				while (file.Video.TryGetNextFrame(out var img)) {
+					if (framePick == 0) {
+						var span = img.Data;
+
+						var dataArr = new Rgba32[width * height];
+
+						var data = new Span<Rgba32>(dataArr);
+
+						switch (img.PixelFormat) {
+							case ImagePixelFormat.Rgba32:
+								data = MemoryMarshal.Cast<byte, Rgba32>(span);
+								var image = Image.LoadPixelData<Rgba32>(data, frameWidth, frameHeight);
+
+
+								if (width != frameWidth || height != frameHeight) {
+									var width1 = width;
+									var height1 = height;
+									image.Mutate(ctx => ctx.Resize(width1, height1));
+								}
+
+								if (image.DangerousTryGetSinglePixelMemory(out memory)) {
+									data = memory.Span;
+								}
+								else {
+									image.CopyPixelDataTo(data);
+								}
+
+								break;
+							case ImagePixelFormat.Bgr24:
+								var imageBgr24 = Image.LoadPixelData<Bgr24>(span, frameWidth, frameHeight);
+
+								var imageRbga32 = imageBgr24.CloneAs<Rgba32>(imageBgr24.GetConfiguration());
+
+								if (width != frameWidth || height != frameHeight) {
+									var width1 = width;
+									var height1 = height;
+									imageRbga32.Mutate(ctx => ctx.Resize(width1, height1));
+								}
+
+								if (imageRbga32.DangerousTryGetSinglePixelMemory(out memory)) {
+									data = memory.Span;
+								}
+								else {
+									imageRbga32.CopyPixelDataTo(data);
+								}
+
+								break;
+						}
+
+
+						brailles.Add(b.Init(data, width, height, brightness, invert, space));
+					}
+
+
+					framePick++;
+					framePick %= frameSelect;
+				}
+
+				if (outPath.Length == 0) {
+					Console.WriteLine("Processing Finished, Press any Key to Continue...");
+					Console.ReadKey();
+					Console.WriteLine("\ec");
+				}
+
+				if (outPath.Length == 0) {
+					foreach (var braille in brailles) {
+						Console.WriteLine(braille);
+						Thread.Sleep((int)(frameDelay * 1000 * frameSelect));
+					}
+				}
+				else {
+					var braillesString = new StringBuilder();
+
+					braillesString.Append(
+						"Width:" + width + "#Height:" + height + "#Frame Delay:" +
+						(int)(frameDelay * 1000 * frameSelect) + "#Data:");
+
+					foreach (var braille in brailles) {
+						braillesString.Append(braille);
+						braillesString.Append('#');
+					}
+
+					File.WriteAllText(outPath, braillesString.ToString());
+				}
+			}
+			catch (Exception e2) {
+				Console.WriteLine(e2);
+			}
 		}
 		catch (Exception e) {
-			Console.WriteLine("Error");
 			Console.WriteLine(e);
 		}
 	}
