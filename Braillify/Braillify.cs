@@ -105,6 +105,8 @@ internal class Braillify {
 
 	public static void Main(string[] args) {
 		var b = new Braillify();
+		var read = false;
+		var loop = false;
 		var inPath = "";
 		var outPath = "";
 		int width;
@@ -122,6 +124,12 @@ internal class Braillify {
 			}
 
 			switch (args[i][1]) {
+				case 'r':
+					read = (args[i + 1].ToLower()[0] == 'y');
+					break;
+				case 'l':
+					loop = (args[i + 1].ToLower()[0] == 'y');
+					break;
 				case 'p':
 					inPath = args[i + 1].Replace("\"", "").Replace("'", "");
 					break;
@@ -192,158 +200,175 @@ internal class Braillify {
 			Console.WriteLine("\ec");
 		}
 
-		try {
-			var image = Image.Load<Rgba32>(inPath, out var format);
+		if (read) {
+			var brailleString = File.ReadAllText(inPath);
+			var keys = brailleString.Split(';');
+			var frameDelay = int.Parse(keys[0].Split(":")[1]);
+			var brailles = keys[1].Split(":")[1].Split("#");
+			Console.WriteLine("\ec");
 
-			if (format == GifFormat.Instance) {
-				throw new UnknownImageFormatException("");
-			}
-
-			width = (int)(scale * image.Width / 100.0);
-			height = (int)(scale * image.Height / 100.0);
-
-
-			width += width % 2;
-
-			if (height % 4 != 0) {
-				height += 4 - (height % 4);
-			}
-
-			if (width != image.Width || height != image.Height) {
-				var width1 = width;
-				var height1 = height;
-				image.Mutate(ctx => ctx.Resize(width1, height1));
-			}
-
-			var dataArr = new Rgba32[width * height];
-			var data = new Span<Rgba32>(dataArr);
-
-			if (image.DangerousTryGetSinglePixelMemory(out var memory)) {
-				data = memory.Span;
-			}
-			else {
-				image.CopyPixelDataTo(data);
-			}
-
-			if (outPath.Length == 0) {
-				Console.WriteLine(b.Init(data, width, height, brightness, invert, space));
-			}
-			else {
-				File.WriteAllText(outPath, b.Init(data, width, height, brightness, invert, space).ToString());
-			}
+			do {
+				foreach (var braille in brailles) {
+					Console.WriteLine(braille);
+					Thread.Sleep(frameDelay);
+				}
+			} while (loop);
 		}
-		catch (UnknownImageFormatException) {
+		else {
 			try {
-				if (outPath.Length == 0) {
-					Console.WriteLine("Converting Video, hold on for a bit");
+				var image = Image.Load<Rgba32>(inPath, out var format);
+
+				if (format == GifFormat.Instance) {
+					throw new UnknownImageFormatException("");
 				}
 
-				var brailles = new List<StringBuilder>();
-				FFmpegLoader.FFmpegPath = "/usr/lib";
-				using var file = MediaFile.Open(inPath);
-				var framePick = 0;
-				var frameDelay = 1 / file.Video.Info.AvgFrameRate;
+				width = (int)(scale * image.Width / 100.0);
+				height = (int)(scale * image.Height / 100.0);
 
 
-				var frameWidth = file.Video.Info.FrameSize.Width;
-				var frameHeight = file.Video.Info.FrameSize.Height;
+				width += width % 2;
 
-				width = (int)(scale * frameWidth / 100.0);
-				height = (int)(scale * frameHeight / 100.0);
+				if (height % 4 != 0) {
+					height += 4 - (height % 4);
+				}
 
-				Memory<Rgba32> memory;
+				if (width != image.Width || height != image.Height) {
+					var width1 = width;
+					var height1 = height;
+					image.Mutate(ctx => ctx.Resize(width1, height1));
+				}
 
-				while (file.Video.TryGetNextFrame(out var img)) {
-					if (framePick == 0) {
-						var span = img.Data;
+				var dataArr = new Rgba32[width * height];
+				var data = new Span<Rgba32>(dataArr);
 
-						var dataArr = new Rgba32[width * height];
+				if (image.DangerousTryGetSinglePixelMemory(out var memory)) {
+					data = memory.Span;
+				}
+				else {
+					image.CopyPixelDataTo(data);
+				}
 
-						var data = new Span<Rgba32>(dataArr);
+				if (outPath.Length == 0) {
+					Console.WriteLine(b.Init(data, width, height, brightness, invert, space));
+				}
+				else {
+					File.WriteAllText(outPath, b.Init(data, width, height, brightness, invert, space).ToString());
+				}
+			}
+			catch (UnknownImageFormatException) {
+				try {
+					if (outPath.Length == 0) {
+						Console.WriteLine("Converting Video, hold on for a bit");
+					}
 
-						switch (img.PixelFormat) {
-							case ImagePixelFormat.Rgba32:
-								data = MemoryMarshal.Cast<byte, Rgba32>(span);
-								var image = Image.LoadPixelData<Rgba32>(data, frameWidth, frameHeight);
+					var brailles = new List<StringBuilder>();
+					FFmpegLoader.FFmpegPath = "/usr/lib";
+					using var file = MediaFile.Open(inPath);
+					var framePick = 0;
+					var frameDelay = (int)(1000 * frameSelect / file.Video.Info.AvgFrameRate);
 
 
-								if (width != frameWidth || height != frameHeight) {
-									var width1 = width;
-									var height1 = height;
-									image.Mutate(ctx => ctx.Resize(width1, height1));
-								}
+					var frameWidth = file.Video.Info.FrameSize.Width;
+					var frameHeight = file.Video.Info.FrameSize.Height;
 
-								if (image.DangerousTryGetSinglePixelMemory(out memory)) {
-									data = memory.Span;
-								}
-								else {
-									image.CopyPixelDataTo(data);
-								}
+					width = (int)(scale * frameWidth / 100.0);
+					height = (int)(scale * frameHeight / 100.0);
 
-								break;
-							case ImagePixelFormat.Bgr24:
-								var imageBgr24 = Image.LoadPixelData<Bgr24>(span, frameWidth, frameHeight);
+					Memory<Rgba32> memory;
 
-								var imageRbga32 = imageBgr24.CloneAs<Rgba32>(imageBgr24.GetConfiguration());
+					while (file.Video.TryGetNextFrame(out var img)) {
+						if (framePick == 0) {
+							var span = img.Data;
 
-								if (width != frameWidth || height != frameHeight) {
-									var width1 = width;
-									var height1 = height;
-									imageRbga32.Mutate(ctx => ctx.Resize(width1, height1));
-								}
+							var dataArr = new Rgba32[width * height];
 
-								if (imageRbga32.DangerousTryGetSinglePixelMemory(out memory)) {
-									data = memory.Span;
-								}
-								else {
-									imageRbga32.CopyPixelDataTo(data);
-								}
+							var data = new Span<Rgba32>(dataArr);
 
-								break;
+							switch (img.PixelFormat) {
+								case ImagePixelFormat.Rgba32:
+									data = MemoryMarshal.Cast<byte, Rgba32>(span);
+									var image = Image.LoadPixelData<Rgba32>(data, frameWidth, frameHeight);
+
+
+									if (width != frameWidth || height != frameHeight) {
+										var width1 = width;
+										var height1 = height;
+										image.Mutate(ctx => ctx.Resize(width1, height1));
+									}
+
+									if (image.DangerousTryGetSinglePixelMemory(out memory)) {
+										data = memory.Span;
+									}
+									else {
+										image.CopyPixelDataTo(data);
+									}
+
+									break;
+								case ImagePixelFormat.Bgr24:
+									var imageBgr24 = Image.LoadPixelData<Bgr24>(span, frameWidth, frameHeight);
+
+									var imageRbga32 = imageBgr24.CloneAs<Rgba32>(imageBgr24.GetConfiguration());
+
+									if (width != frameWidth || height != frameHeight) {
+										var width1 = width;
+										var height1 = height;
+										imageRbga32.Mutate(ctx => ctx.Resize(width1, height1));
+									}
+
+									if (imageRbga32.DangerousTryGetSinglePixelMemory(out memory)) {
+										data = memory.Span;
+									}
+									else {
+										imageRbga32.CopyPixelDataTo(data);
+									}
+
+									break;
+							}
+
+
+							brailles.Add(b.Init(data, width, height, brightness, invert, space));
 						}
 
 
-						brailles.Add(b.Init(data, width, height, brightness, invert, space));
+						framePick++;
+						framePick %= frameSelect;
 					}
 
-
-					framePick++;
-					framePick %= frameSelect;
-				}
-
-				if (outPath.Length == 0) {
-					Console.WriteLine("Processing Finished, Press any Key to Continue...");
-					Console.ReadKey();
-					Console.WriteLine("\ec");
-				}
-
-				if (outPath.Length == 0) {
-					foreach (var braille in brailles) {
-						Console.WriteLine(braille);
-						Thread.Sleep((int)(frameDelay * 1000 * frameSelect));
-					}
-				}
-				else {
-					var braillesString = new StringBuilder();
-
-					braillesString.Append(
-						"Width:" + width + "#Height:" + height + "#Frame Delay:" +
-						(int)(frameDelay * 1000 * frameSelect) + "#Data:");
-
-					foreach (var braille in brailles) {
-						braillesString.Append(braille);
-						braillesString.Append('#');
+					if (outPath.Length == 0) {
+						Console.WriteLine("Processing Finished, Press any Key to Continue...");
+						Console.ReadKey();
+						Console.WriteLine("\ec");
 					}
 
-					File.WriteAllText(outPath, braillesString.ToString());
+					if (outPath.Length == 0) {
+						do {
+							foreach (var braille in brailles) {
+								Console.WriteLine(braille);
+								Thread.Sleep(frameDelay);
+							}
+						} while (loop);
+					}
+					else {
+						var braillesString = new StringBuilder();
+
+						braillesString.Append(
+							"Frame Delay:" + frameDelay + ";Data:");
+
+						foreach (var braille in brailles) {
+							braillesString.Append(braille);
+							braillesString.Append('#');
+						}
+
+						File.WriteAllText(outPath, braillesString.ToString());
+					}
+				}
+				catch (Exception e2) {
+					Console.WriteLine(e2);
 				}
 			}
-			catch (Exception e2) {
-				Console.WriteLine(e2);
+			catch (Exception e) {
+				Console.WriteLine(e);
 			}
-		}
-		catch (Exception e) {
-			Console.WriteLine(e);
 		}
 	}
 }
