@@ -290,7 +290,7 @@ internal class Braillify : IDisposable {
 							Thread.Sleep((int)(elapsedTime - b._stp.ElapsedMilliseconds));
 						}
 
-						Console.Write(braille);
+						Console.Write(braille.Substring(0, braille.Length - 1));
 					}
 				} while (loop);
 
