@@ -255,16 +255,17 @@ internal class Braillify : IDisposable {
 			var frameDelay = int.Parse(keys[0].Split(":")[1]);
 			var brailles = keys[1].Split(":")[1].Split("#");
 			Console.WriteLine("\ec");
-			elapsedTime = b._stp.ElapsedMilliseconds-frameDelay;
+			elapsedTime = b._stp.ElapsedMilliseconds - frameDelay;
 
 			do {
 				foreach (var braille in brailles) {
 					elapsedTime += frameDelay;
-					if (b._stp.ElapsedMilliseconds < elapsedTime) {
-						Thread.Sleep((int)(b._stp.ElapsedMilliseconds - elapsedTime));
-					}
-					Console.Write(braille);
 
+					if (b._stp.ElapsedMilliseconds < elapsedTime) {
+						Thread.Sleep((int)(elapsedTime - b._stp.ElapsedMilliseconds));
+					}
+
+					Console.Write(braille);
 				}
 			} while (loop);
 
