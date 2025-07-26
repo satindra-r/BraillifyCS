@@ -247,32 +247,32 @@ internal class Braillify : IDisposable {
 
 		int fileType;
 
-			var brailleString = File.ReadAllText(inPath);
-			if (brailleString.Split(";")[0] == "Braillify") {
-				fileType = 0;
-			}
-			else {
-				try {
-					using var image = Image.Load<Rgba32>(inPath, out var format);
+		var brailleString = File.ReadAllText(inPath);
 
-					if (format == GifFormat.Instance) {
-						fileType = 2;
-					}
-					else {
-						fileType = 1;
-					}
+		if (brailleString.Split(";")[0] == "Braillify") {
+			fileType = 0;
+		}
+		else {
+			try {
+				using var image = Image.Load<Rgba32>(inPath, out var format);
+
+				if (format == GifFormat.Instance) {
+					throw new Exception("GIF");
+				}
+
+				fileType = 1;
+			}
+			catch (Exception) {
+				try {
+					FFmpegLoader.FFmpegPath = "/usr/lib";
+					using var file = MediaFile.Open(inPath);
+					fileType = 2;
 				}
 				catch (Exception) {
-					try {
-						FFmpegLoader.FFmpegPath = "/usr/lib";
-						using var file = MediaFile.Open(inPath);
-						fileType = 2;
-					}
-					catch (Exception) {
-						fileType = 0;
-					}
-				}	
+					fileType = 0;
+				}
 			}
+		}
 
 		switch (fileType) {
 			case 0: {
