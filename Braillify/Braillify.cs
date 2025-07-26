@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using FFMediaToolkit.Decoding;
 using FFMediaToolkit.Graphics;
@@ -14,19 +15,21 @@ using SixLabors.ImageSharp.Processing;
 
 namespace Braillify;
 
-internal class Braillify {
+internal class Braillify : IDisposable {
 	private readonly Context _context;
 	private readonly Accelerator _accelerator;
+	private readonly Stopwatch _stp;
 
 	private Braillify() {
-		_context = Context.Create(builder => builder.AllAccelerators());
+		_stp = new Stopwatch();
+		_stp.Start();
+		_context = Context.Create(builder => builder.AllAccelerators().EnableAlgorithms());
 		var d = _context.GetPreferredDevice(preferCPU: false);
 		_accelerator = d.CreateAccelerator(_context);
 	}
 
 	~Braillify() {
-		_accelerator.Dispose();
-		_context.Dispose();
+		Dispose(false);
 	}
 
 	private static void Kernel(Index1D i, ArrayView<Rgba32> data, ArrayView<int> output, int width, int height,
@@ -145,9 +148,10 @@ internal class Braillify {
 			invert ? 1 : 0, space);
 
 		a.Synchronize();
+
 		var braille = outputBuff.GetAsArray1D();
 
-		var brailleBuilder = new StringBuilder();
+		var brailleBuilder = new StringBuilder((height * width / 8) + height + 3);
 		brailleBuilder.Append("\e[H");
 
 		for (var i = 0; i < height / 4; i++) {
@@ -172,7 +176,8 @@ internal class Braillify {
 	}
 
 	public static void Main(string[] args) {
-		var b = new Braillify();
+		using var b = new Braillify();
+		var elapsedTime = -1L;
 		var alt = false;
 		var read = false;
 		var loop = false;
@@ -250,11 +255,16 @@ internal class Braillify {
 			var frameDelay = int.Parse(keys[0].Split(":")[1]);
 			var brailles = keys[1].Split(":")[1].Split("#");
 			Console.WriteLine("\ec");
+			elapsedTime = b._stp.ElapsedMilliseconds-frameDelay;
 
 			do {
 				foreach (var braille in brailles) {
+					elapsedTime += frameDelay;
+					if (b._stp.ElapsedMilliseconds < elapsedTime) {
+						Thread.Sleep((int)(b._stp.ElapsedMilliseconds - elapsedTime));
+					}
 					Console.Write(braille);
-					Thread.Sleep(frameDelay);
+
 				}
 			} while (loop);
 
@@ -262,7 +272,7 @@ internal class Braillify {
 		}
 		else {
 			try {
-				var image = Image.Load<Rgba32>(inPath, out var format);
+				using var image = Image.Load<Rgba32>(inPath, out var format);
 
 				if (format == GifFormat.Instance) {
 					throw new UnknownImageFormatException("");
@@ -305,8 +315,12 @@ internal class Braillify {
 			catch (UnknownImageFormatException) {
 				try {
 					if (outPath.Length == 0) {
+						Console.WriteLine("\ec");
+					}
+					else {
 						Console.WriteLine("Converting Video, hold on for a bit");
 					}
+
 
 					var brailles = new List<StringBuilder>();
 					FFmpegLoader.FFmpegPath = "/usr/lib";
@@ -372,8 +386,25 @@ internal class Braillify {
 									break;
 							}
 
+							if (outPath.Length == 0) {
+								if (elapsedTime > 0) {
+									elapsedTime += frameDelay;
 
-							brailles.Add(b.ScheduleTask(data, width, height, brightness, invert, space, alt));
+									if (b._stp.ElapsedMilliseconds < elapsedTime) {
+										Thread.Sleep((int)(elapsedTime - b._stp.ElapsedMilliseconds));
+									}
+								}
+								else {
+									elapsedTime = b._stp.ElapsedMilliseconds;
+								}
+
+
+								Console.WriteLine(b.ScheduleTask(data, width, height, brightness, invert, space,
+									alt));
+							}
+							else {
+								brailles.Add(b.ScheduleTask(data, width, height, brightness, invert, space, alt));
+							}
 						}
 
 
@@ -381,23 +412,7 @@ internal class Braillify {
 						framePick %= frameSelect;
 					}
 
-					if (outPath.Length == 0) {
-						Console.WriteLine("Processing Finished, Press any Key to Continue...");
-						Console.ReadKey();
-						Console.WriteLine("\ec");
-					}
-
-					if (outPath.Length == 0) {
-						do {
-							foreach (var braille in brailles) {
-								Console.Write(braille);
-								Thread.Sleep(frameDelay);
-							}
-						} while (loop);
-
-						Console.WriteLine("");
-					}
-					else {
+					if (outPath.Length != 0) {
 						var braillesString = new StringBuilder();
 
 						braillesString.Append(
@@ -419,5 +434,24 @@ internal class Braillify {
 				Console.WriteLine(e);
 			}
 		}
+	}
+
+	private void ReleaseUnmanagedResources() {
+		_accelerator.Dispose();
+		_context.Dispose();
+	}
+
+	private void Dispose(bool disposing) {
+		ReleaseUnmanagedResources();
+
+		if (disposing) {
+			_context.Dispose();
+			_accelerator.Dispose();
+		}
+	}
+
+	public void Dispose() {
+		Dispose(true);
+		GC.SuppressFinalize(this);
 	}
 }
