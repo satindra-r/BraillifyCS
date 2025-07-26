@@ -345,7 +345,6 @@ internal class Braillify : IDisposable {
 
 
 				var brailles = new List<StringBuilder>();
-				FFmpegLoader.FFmpegPath = "/usr/lib";
 				using var file = MediaFile.Open(inPath);
 				var framePick = 0;
 				var frameDelay = (int)(1000 * frameSelect / file.Video.Info.AvgFrameRate);
