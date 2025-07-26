@@ -247,33 +247,38 @@ internal class Braillify : IDisposable {
 
 		int fileType;
 
-		try {
-			using var image = Image.Load<Rgba32>(inPath, out var format);
-
-			if (format == GifFormat.Instance) {
-				fileType = 2;
-			}
-			else {
-				fileType = 1;
-			}
-		}
-		catch (Exception) {
-			try {
-				FFmpegLoader.FFmpegPath = "/usr/lib";
-				using var file = MediaFile.Open(inPath);
-				fileType = 2;
-			}
-			catch (Exception) {
+			var brailleString = File.ReadAllText(inPath);
+			if (brailleString.Split(";")[0] == "Braillify") {
 				fileType = 0;
 			}
-		}
+			else {
+				try {
+					using var image = Image.Load<Rgba32>(inPath, out var format);
+
+					if (format == GifFormat.Instance) {
+						fileType = 2;
+					}
+					else {
+						fileType = 1;
+					}
+				}
+				catch (Exception) {
+					try {
+						FFmpegLoader.FFmpegPath = "/usr/lib";
+						using var file = MediaFile.Open(inPath);
+						fileType = 2;
+					}
+					catch (Exception) {
+						fileType = 0;
+					}
+				}	
+			}
 
 		switch (fileType) {
 			case 0: {
-				var brailleString = File.ReadAllText(inPath);
 				var keys = brailleString.Split(';');
-				var frameDelay = int.Parse(keys[0].Split(":")[1]);
-				var brailles = keys[1].Split(":")[1].Split("#");
+				var frameDelay = int.Parse(keys[1].Split(":")[1]);
+				var brailles = keys[2].Split(":")[1].Split("#");
 				Console.WriteLine("\ec");
 				elapsedTime = b._stp.ElapsedMilliseconds - frameDelay;
 
@@ -437,7 +442,7 @@ internal class Braillify : IDisposable {
 					var braillesString = new StringBuilder();
 
 					braillesString.Append(
-						"Frame Delay:" + frameDelay + ";Data:");
+						"Braillify;Frame Delay:" + frameDelay + ";Data:");
 
 					foreach (var braille in brailles) {
 						braillesString.Append(braille);
