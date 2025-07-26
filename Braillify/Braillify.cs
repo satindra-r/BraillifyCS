@@ -15,8 +15,62 @@ using SixLabors.ImageSharp.Processing;
 namespace Braillify;
 
 internal class Braillify {
+	private readonly Context _context;
+	private readonly Accelerator _accelerator;
+
+	private Braillify() {
+		_context = Context.Create(builder => builder.AllAccelerators());
+		var d = _context.GetPreferredDevice(preferCPU: false);
+		_accelerator = d.CreateAccelerator(_context);
+	}
+
+	~Braillify() {
+		_accelerator.Dispose();
+		_context.Dispose();
+	}
+
 	private static void Kernel(Index1D i, ArrayView<Rgba32> data, ArrayView<int> output, int width, int height,
-		double brightness, int invert, int space, int alt) {
+		double brightness, int invert, int space) {
+		var x = i % (width / 2);
+		var y = i / (width / 2);
+
+		output[i] = '⠀';
+
+		for (var j = 0; j < 8; j++) {
+			int dX;
+			int dY;
+
+			if (j < 6) {
+				dX = j / 3;
+				dY = j % 3;
+			}
+			else {
+				dX = j % 2;
+				dY = 3;
+			}
+
+			var colour = data[x * 2 + dX + (y * 4 + dY) * width];
+			var r = colour.R;
+			var g = colour.G;
+			var b = colour.B;
+			var rSq = r * r;
+			var gSq = g * g;
+			var bSq = b * b;
+			var grey = XMath.Sqrt((rSq + gSq + bSq) / 3.0);
+
+
+			if ((grey > brightness * 255) == (invert == 0)) {
+				output[i] |= (1 << j);
+			}
+		}
+
+		if (output[i] == '⠀') {
+			output[i] = space;
+		}
+	}
+
+	private static void KernelAlt(Index1D i, ArrayView<Rgba32> data, ArrayView<int> output, int width, int height,
+		double brightness, int invert, int space) {
 		int[] oct = [
 			32, 118440, 118443, 129922, 118016, 9624, 118017, 118018, 118019, 118020, 9629, 118021, 118022, 118023,
 			118024, 9600, 118025, 118026, 118027, 118028, 130022, 118029, 118030, 118031, 118032, 118033, 118034,
@@ -43,32 +97,14 @@ internal class Braillify {
 		var x = i % (width / 2);
 		var y = i / (width / 2);
 
-		if (alt == 0) {
-			output[i] = '⠀';
-		}
-		else {
-			output[i] = 0;
-		}
+
+		output[i] = 0;
 
 
 		for (var j = 0; j < 8; j++) {
-			int dX;
-			int dY;
+			var dX = j % 2;
+			var dY = j / 2;
 
-			if (alt == 0) {
-				if (j < 6) {
-					dX = j / 3;
-					dY = j % 3;
-				}
-				else {
-					dX = j % 2;
-					dY = 3;
-				}
-			}
-			else {
-				dX = j % 2;
-				dY = j / 2;
-			}
 
 			var colour = data[x * 2 + dX + (y * 4 + dY) * width];
 			var r = colour.R;
@@ -85,30 +121,30 @@ internal class Braillify {
 			}
 		}
 
-		if (alt == 0) {
-			if (output[i] == '⠀') {
-				output[i] = space;
-			}
-		}
-		else {
-			output[i] = oct[output[i]];
-		}
+
+		output[i] = oct[output[i]];
 	}
 
 	private StringBuilder Compute(Accelerator a, MemoryBuffer1D<Rgba32, Stride1D.Dense> inputBuff,
 		MemoryBuffer1D<int, Stride1D.Dense> outputBuff, int width, int height, double brightness, bool invert,
 		char space, bool alt) {
-		var loadedKernel =
-			a.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Rgba32>, ArrayView<int>, int, int, double, int, int,
-				int>(
-				Kernel);
+		Action<Index1D, ArrayView<Rgba32>, ArrayView<int>, int, int, double, int, int> loadedKernel;
 
+		if (alt) {
+			loadedKernel =
+				a.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Rgba32>, ArrayView<int>, int, int, double, int, int>(
+					KernelAlt);
+		}
+		else {
+			loadedKernel =
+				a.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Rgba32>, ArrayView<int>, int, int, double, int, int>(
+					Kernel);
+		}
 
 		loadedKernel((int)outputBuff.Length, inputBuff.View, outputBuff.View, width, height, brightness,
-			invert ? 1 : 0, space, alt ? 1 : 0);
+			invert ? 1 : 0, space);
 
 		a.Synchronize();
-
 		var braille = outputBuff.GetAsArray1D();
 
 		var brailleBuilder = new StringBuilder();
@@ -125,18 +161,14 @@ internal class Braillify {
 		return brailleBuilder;
 	}
 
-	private StringBuilder Init(Span<Rgba32> data, int width, int height, double brightness, bool invert, char space,
+	private StringBuilder ScheduleTask(Span<Rgba32> data, int width, int height, double brightness, bool invert,
+		char space,
 		bool alt) {
-		using var context = Context.Create(builder => builder.AllAccelerators());
-		var d = context.GetPreferredDevice(preferCPU: false);
-		using var a = d.CreateAccelerator(context);
-
-
-		using var inputBuff = a.Allocate1D<Rgba32>(data.Length);
+		using var inputBuff = _accelerator.Allocate1D<Rgba32>(data.Length);
 		inputBuff.View.BaseView.CopyFromCPU((ReadOnlySpan<Rgba32>)data);
-		using var outputBuff = a.Allocate1D<int>(width * height / 8);
+		using var outputBuff = _accelerator.Allocate1D<int>(width * height / 8);
 
-		return Compute(a, inputBuff, outputBuff, width, height, brightness, invert, space, alt);
+		return Compute(_accelerator, inputBuff, outputBuff, width, height, brightness, invert, space, alt);
 	}
 
 	public static void Main(string[] args) {
@@ -263,10 +295,11 @@ internal class Braillify {
 				}
 
 				if (outPath.Length == 0) {
-					Console.WriteLine(b.Init(data, width, height, brightness, invert, space, alt));
+					Console.WriteLine(b.ScheduleTask(data, width, height, brightness, invert, space, alt));
 				}
 				else {
-					File.WriteAllText(outPath, b.Init(data, width, height, brightness, invert, space, alt).ToString());
+					File.WriteAllText(outPath,
+						b.ScheduleTask(data, width, height, brightness, invert, space, alt).ToString());
 				}
 			}
 			catch (UnknownImageFormatException) {
@@ -340,7 +373,7 @@ internal class Braillify {
 							}
 
 
-							brailles.Add(b.Init(data, width, height, brightness, invert, space, alt));
+							brailles.Add(b.ScheduleTask(data, width, height, brightness, invert, space, alt));
 						}
 
 
