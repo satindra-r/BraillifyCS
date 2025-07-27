@@ -361,6 +361,12 @@ internal class Braillify : IDisposable {
 				width = (int)(scale * frameWidth / 100.0);
 				height = (int)(scale * frameHeight / 100.0);
 
+				width += width % 2;
+
+				if (height % 4 != 0) {
+					height += 4 - (height % 4);
+				}
+				
 				Memory<Rgba32> memory;
 
 				while (file.Video.TryGetNextFrame(out var img)) {
