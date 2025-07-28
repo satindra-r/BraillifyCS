@@ -366,7 +366,7 @@ internal class Braillify : IDisposable {
 				if (height % 4 != 0) {
 					height += 4 - (height % 4);
 				}
-				
+
 				Memory<Rgba32> memory;
 
 				while (file.Video.TryGetNextFrame(out var img)) {
@@ -398,7 +398,21 @@ internal class Braillify : IDisposable {
 
 								break;
 							case ImagePixelFormat.Bgr24:
-								var imageBgr24 = Image.LoadPixelData<Bgr24>(span, frameWidth, frameHeight);
+								var backing = new Bgr24[frameWidth * frameHeight];
+								var spanBgr = new Span<Bgr24>(backing);
+
+								var stride = img.Stride;
+
+								for (var i = 0; i < frameHeight; i++) {
+									for (var j = 0; j < frameWidth; j++) {
+										spanBgr[j + i * frameWidth] = new Bgr24(span[j * 3 + i * stride],
+											span[j * 3 + i * stride + 1],
+											span[j * 3 + i * stride + 2]);
+									}
+								}
+
+
+								var imageBgr24 = Image.LoadPixelData<Bgr24>(spanBgr, frameWidth, frameHeight);
 
 								var imageRbga32 = imageBgr24.CloneAs<Rgba32>(imageBgr24.GetConfiguration());
 
