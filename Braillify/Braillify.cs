@@ -19,6 +19,7 @@ internal class Braillify : IDisposable {
 	private readonly Context _context;
 	private readonly Accelerator _accelerator;
 	private readonly Stopwatch _stp;
+	private readonly int[] _oct;
 
 	private Braillify() {
 		_stp = new Stopwatch();
@@ -26,6 +27,29 @@ internal class Braillify : IDisposable {
 		_context = Context.Create(builder => builder.AllAccelerators().EnableAlgorithms());
 		var d = _context.GetPreferredDevice(preferCPU: false);
 		_accelerator = d.CreateAccelerator(_context);
+
+		_oct = [
+			32, 118440, 118443, 129922, 118016, 9624, 118017, 118018, 118019, 118020, 9629, 118021, 118022, 118023,
+			118024, 9600, 118025, 118026, 118027, 118028, 130022, 118029, 118030, 118031, 118032, 118033, 118034,
+			118035, 118036, 118037, 118038, 118039, 118040, 118041, 118042, 118043, 118044, 118045, 118046, 118047,
+			130023, 118048, 118049, 118050, 118051, 118052, 118053, 118054, 118055, 118056, 118057, 118058, 118059,
+			118060, 118061, 118062, 118063, 118064, 118065, 118066, 118067, 118068, 118069, 129925, 118435, 118070,
+			118071, 118072, 118073, 118074, 118075, 118076, 118077, 118078, 118079, 118080, 118081, 118082, 118083,
+			118084, 9622, 118085, 118086, 118087, 118088, 9612, 118089, 118090, 118091, 118092, 9630, 118093, 118094,
+			118095, 118096, 9627, 118097, 118098, 118099, 118100, 118101, 118102, 118103, 118104, 118105, 118106,
+			118107, 118108, 118109, 118110, 118111, 118112, 118113, 118114, 118115, 118116, 118117, 118118, 118119,
+			118120, 118121, 118122, 118123, 118124, 118125, 118126, 118127, 118128, 118432, 118129, 118130, 118131,
+			118132, 118133, 118134, 118135, 118136, 118137, 118138, 118139, 118140, 118141, 118142, 118143, 118144,
+			118145, 118146, 118147, 118148, 118149, 118150, 118151, 118152, 118153, 118154, 118155, 118156, 118157,
+			118158, 118159, 9623, 118160, 118161, 118162, 118163, 9626, 118164, 118165, 118166, 118167, 9616, 118168,
+			118169, 118170, 118171, 9628, 118172, 118173, 118174, 118175, 118176, 118177, 118178, 118179, 118180,
+			118181, 118182, 118183, 118184, 118185, 118186, 118187, 9602, 118188, 118189, 118190, 118191, 118192,
+			118193, 118194, 118195, 118196, 118197, 118198, 118199, 118200, 118201, 118202, 118203, 118204, 118205,
+			118206, 118207, 118208, 118209, 118210, 118211, 118212, 118213, 118214, 118215, 118216, 118217, 118218,
+			118219, 118220, 118221, 118222, 118223, 118224, 118225, 118226, 118227, 118228, 118229, 118230, 118231,
+			118232, 118233, 118234, 9604, 118235, 118236, 118237, 118238, 9625, 118239, 118240, 118241, 118242, 9631,
+			118243, 9606, 118244, 118245, 9608
+		];
 	}
 
 	~Braillify() {
@@ -43,6 +67,7 @@ internal class Braillify : IDisposable {
 			int dX;
 			int dY;
 
+			
 			if (j < 6) {
 				dX = j / 3;
 				dY = j % 3;
@@ -72,31 +97,9 @@ internal class Braillify : IDisposable {
 		}
 	}
 
-	private static void KernelAlt(Index1D i, ArrayView<Rgba32> data, ArrayView<int> output, int width, int height,
+	private static void KernelAlt(Index1D i, ArrayView<Rgba32> data, ArrayView<int> output, ArrayView<int> oct,
+		int width, int height,
 		double brightness, int invert, int space) {
-		int[] oct = [
-			32, 118440, 118443, 129922, 118016, 9624, 118017, 118018, 118019, 118020, 9629, 118021, 118022, 118023,
-			118024, 9600, 118025, 118026, 118027, 118028, 130022, 118029, 118030, 118031, 118032, 118033, 118034,
-			118035, 118036, 118037, 118038, 118039, 118040, 118041, 118042, 118043, 118044, 118045, 118046, 118047,
-			130023, 118048, 118049, 118050, 118051, 118052, 118053, 118054, 118055, 118056, 118057, 118058, 118059,
-			118060, 118061, 118062, 118063, 118064, 118065, 118066, 118067, 118068, 118069, 129925, 118435, 118070,
-			118071, 118072, 118073, 118074, 118075, 118076, 118077, 118078, 118079, 118080, 118081, 118082, 118083,
-			118084, 9622, 118085, 118086, 118087, 118088, 9612, 118089, 118090, 118091, 118092, 9630, 118093, 118094,
-			118095, 118096, 9627, 118097, 118098, 118099, 118100, 118101, 118102, 118103, 118104, 118105, 118106,
-			118107, 118108, 118109, 118110, 118111, 118112, 118113, 118114, 118115, 118116, 118117, 118118, 118119,
-			118120, 118121, 118122, 118123, 118124, 118125, 118126, 118127, 118128, 118432, 118129, 118130, 118131,
-			118132, 118133, 118134, 118135, 118136, 118137, 118138, 118139, 118140, 118141, 118142, 118143, 118144,
-			118145, 118146, 118147, 118148, 118149, 118150, 118151, 118152, 118153, 118154, 118155, 118156, 118157,
-			118158, 118159, 9623, 118160, 118161, 118162, 118163, 9626, 118164, 118165, 118166, 118167, 9616, 118168,
-			118169, 118170, 118171, 9628, 118172, 118173, 118174, 118175, 118176, 118177, 118178, 118179, 118180,
-			118181, 118182, 118183, 118184, 118185, 118186, 118187, 9602, 118188, 118189, 118190, 118191, 118192,
-			118193, 118194, 118195, 118196, 118197, 118198, 118199, 118200, 118201, 118202, 118203, 118204, 118205,
-			118206, 118207, 118208, 118209, 118210, 118211, 118212, 118213, 118214, 118215, 118216, 118217, 118218,
-			118219, 118220, 118221, 118222, 118223, 118224, 118225, 118226, 118227, 118228, 118229, 118230, 118231,
-			118232, 118233, 118234, 9604, 118235, 118236, 118237, 118238, 9625, 118239, 118240, 118241, 118242, 9631,
-			118243, 9606, 118244, 118245, 9608
-		];
-
 		var x = i % (width / 2);
 		var y = i / (width / 2);
 
@@ -129,23 +132,27 @@ internal class Braillify : IDisposable {
 	}
 
 	private StringBuilder Compute(Accelerator a, MemoryBuffer1D<Rgba32, Stride1D.Dense> inputBuff,
-		MemoryBuffer1D<int, Stride1D.Dense> outputBuff, int width, int height, double brightness, bool invert,
+		MemoryBuffer1D<int, Stride1D.Dense> outputBuff, MemoryBuffer1D<int, Stride1D.Dense> oct, int width, int height,
+		double brightness, bool invert,
 		char space, bool alt) {
-		Action<Index1D, ArrayView<Rgba32>, ArrayView<int>, int, int, double, int, int> loadedKernel;
-
 		if (alt) {
-			loadedKernel =
-				a.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Rgba32>, ArrayView<int>, int, int, double, int, int>(
+			var loadedKernel = a
+				.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Rgba32>, ArrayView<int>, ArrayView<int>, int, int,
+					double, int, int>(
 					KernelAlt);
+
+			loadedKernel((int)outputBuff.Length, inputBuff.View, outputBuff.View, oct.View, width, height, brightness,
+				invert ? 1 : 0, space);
 		}
 		else {
-			loadedKernel =
+			var loadedKernel =
 				a.LoadAutoGroupedStreamKernel<Index1D, ArrayView<Rgba32>, ArrayView<int>, int, int, double, int, int>(
 					Kernel);
+
+			loadedKernel((int)outputBuff.Length, inputBuff.View, outputBuff.View, width, height, brightness,
+				invert ? 1 : 0, space);
 		}
 
-		loadedKernel((int)outputBuff.Length, inputBuff.View, outputBuff.View, width, height, brightness,
-			invert ? 1 : 0, space);
 
 		a.Synchronize();
 
@@ -171,8 +178,11 @@ internal class Braillify : IDisposable {
 		using var inputBuff = _accelerator.Allocate1D<Rgba32>(data.Length);
 		inputBuff.View.BaseView.CopyFromCPU((ReadOnlySpan<Rgba32>)data);
 		using var outputBuff = _accelerator.Allocate1D<int>(width * height / 8);
+		using var oct = _accelerator.Allocate1D<int>(_oct.Length);
+		oct.View.BaseView.CopyFromCPU((ReadOnlySpan<int>)_oct);
 
-		return Compute(_accelerator, inputBuff, outputBuff, width, height, brightness, invert, space, alt);
+
+		return Compute(_accelerator, inputBuff, outputBuff, oct, width, height, brightness, invert, space, alt);
 	}
 
 	public static void Main(string[] args) {
