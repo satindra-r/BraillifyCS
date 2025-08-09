@@ -420,35 +420,34 @@ internal class Braillify : IDisposable {
 
 								break;
 							case ImagePixelFormat.Bgr24:
-								var backing = new Bgr24[frameWidth * frameHeight];
-								var spanBgr = new Span<Bgr24>(backing);
+								var backing = new Rgba32[frameWidth * frameHeight];
+								var spanRgba = new Span<Rgba32>(backing);
 
 								var stride = img.Stride;
 
 								for (var i = 0; i < frameHeight; i++) {
 									for (var j = 0; j < frameWidth; j++) {
-										spanBgr[j + i * frameWidth] = new Bgr24(span[j * 3 + i * stride],
+										spanRgba[j + i * frameWidth] = new Rgba32(span[j * 3 + i * stride],
 											span[j * 3 + i * stride + 1],
 											span[j * 3 + i * stride + 2]);
 									}
 								}
 
 
-								var imageBgr24 = Image.LoadPixelData<Bgr24>(spanBgr, frameWidth, frameHeight);
+								var imageRgba32 = Image.LoadPixelData<Rgba32>(spanRgba, frameWidth, frameHeight);
 
-								var imageRbga32 = imageBgr24.CloneAs<Rgba32>(imageBgr24.GetConfiguration());
 
 								if (width != frameWidth || height != frameHeight) {
 									var width1 = width;
 									var height1 = height;
-									imageRbga32.Mutate(ctx => ctx.Resize(width1, height1));
+									imageRgba32.Mutate(ctx => ctx.Resize(width1, height1));
 								}
 
-								if (imageRbga32.DangerousTryGetSinglePixelMemory(out memory)) {
+								if (imageRgba32.DangerousTryGetSinglePixelMemory(out memory)) {
 									data = memory.Span;
 								}
 								else {
-									imageRbga32.CopyPixelDataTo(data);
+									imageRgba32.CopyPixelDataTo(data);
 								}
 
 								break;
