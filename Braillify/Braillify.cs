@@ -61,13 +61,18 @@ internal class Braillify : IDisposable {
 		var x = i % (width / 2);
 		var y = i / (width / 2);
 
+		double[] bArr = [
+			1.0 / 32, 17.0 / 32, 5.0 / 32, 21.0 / 32, 25.0 / 32, 9.0 / 32, 29.0 / 32, 13.0 / 32, 7.0 / 32, 23.0 / 32,
+			3.0 / 32, 19.0 / 32, 31.0 / 32, 15.0 / 32, 27.0 / 32, 11.0 / 32
+		];
+
 		output[i] = '⠀';
 
 		for (var j = 0; j < 8; j++) {
 			int dX;
 			int dY;
+			var d2X = (j / 2) % 2;
 
-			
 			if (j < 6) {
 				dX = j / 3;
 				dY = j % 3;
@@ -77,6 +82,8 @@ internal class Braillify : IDisposable {
 				dY = 3;
 			}
 
+			var brightnessEff = (brightness < 0) ? bArr[dY * 4 + dX + d2X] : brightness;
+
 			var colour = data[x * 2 + dX + (y * 4 + dY) * width];
 			var r = colour.R;
 			var g = colour.G;
@@ -84,10 +91,9 @@ internal class Braillify : IDisposable {
 			var rSq = r * r;
 			var gSq = g * g;
 			var bSq = b * b;
-			var grey = XMath.Sqrt((rSq + gSq + bSq) / 3.0);
+			var grey = (int)XMath.Sqrt((rSq + gSq + bSq) / 3.0);
 
-
-			if ((grey > brightness * 255) == (invert == 0)) {
+			if ((grey > brightnessEff * 255) == (invert == 0)) {
 				output[i] |= (1 << j);
 			}
 		}
@@ -103,6 +109,10 @@ internal class Braillify : IDisposable {
 		var x = i % (width / 2);
 		var y = i / (width / 2);
 
+		double[] bArr = [
+			1.0 / 32, 17.0 / 32, 5.0 / 32, 21.0 / 32, 25.0 / 32, 9.0 / 32, 29.0 / 32, 13.0 / 32, 7.0 / 32, 23.0 / 32,
+			3.0 / 32, 19.0 / 32, 31.0 / 32, 15.0 / 32, 27.0 / 32, 11.0 / 32
+		];
 
 		output[i] = 0;
 
@@ -110,7 +120,9 @@ internal class Braillify : IDisposable {
 		for (var j = 0; j < 8; j++) {
 			var dX = j % 2;
 			var dY = j / 2;
+			var d2X = (j / 2) % 2;
 
+			var brightnessEff = (brightness < 0) ? bArr[dY * 4 + dX + d2X] : brightness;
 
 			var colour = data[x * 2 + dX + (y * 4 + dY) * width];
 			var r = colour.R;
@@ -122,7 +134,7 @@ internal class Braillify : IDisposable {
 			var grey = XMath.Sqrt((rSq + gSq + bSq) / 3.0);
 
 
-			if ((grey > brightness * 255) == (invert == 0)) {
+			if ((grey > brightnessEff * 255) == (invert == 0)) {
 				output[i] |= (1 << j);
 			}
 		}
@@ -197,7 +209,7 @@ internal class Braillify : IDisposable {
 		var invert = false;
 		var frameSelect = 1;
 		var space = '⠀';
-		var brightness = 50 / 100.0;
+		var brightness = -1.0;
 
 		var scale = 100.0;
 
