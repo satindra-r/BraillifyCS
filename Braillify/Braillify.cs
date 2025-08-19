@@ -9,7 +9,6 @@ using ILGPU.Runtime;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using ILGPU.Algorithms;
-using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Formats.Gif;
 using SixLabors.ImageSharp.Processing;
 
@@ -171,7 +170,7 @@ internal class Braillify : IDisposable {
 		var braille = outputBuff.GetAsArray1D();
 
 		var brailleBuilder = new StringBuilder((height * width / 8) + height + 3);
-		brailleBuilder.Append("\e[H");
+		brailleBuilder.Append("\u001B[H");
 
 		for (var i = 0; i < height / 4; i++) {
 			for (var j = 0; j < width / 2; j++) {
@@ -264,7 +263,7 @@ internal class Braillify : IDisposable {
 		}
 
 		if (outPath.Length == 0) {
-			Console.WriteLine("\ec");
+			Console.WriteLine("\u001Bc");
 		}
 
 		int fileType;
@@ -301,7 +300,7 @@ internal class Braillify : IDisposable {
 				var keys = brailleString.Split(';');
 				var frameDelay = int.Parse(keys[1].Split(":")[1]);
 				var brailles = keys[2].Split(":")[1].Split("#");
-				Console.WriteLine("\ec");
+				Console.WriteLine("\u001Bc");
 				elapsedTime = b._stp.ElapsedMilliseconds - frameDelay;
 
 				do {
@@ -364,7 +363,7 @@ internal class Braillify : IDisposable {
 				break;
 			case 2: {
 				if (outPath.Length == 0) {
-					Console.WriteLine("\ec");
+					Console.WriteLine("\u001Bc");
 				}
 				else {
 					Console.WriteLine("Converting Video, hold on for a bit");
