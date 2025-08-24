@@ -214,7 +214,7 @@ internal class Braillify : IDisposable {
 
 		for (var i = 0; i < args.Length; i += 2) {
 			if (args[i][0] != '-') {
-				throw new Exception();
+				throw new Exception("Invalid argument format");
 			}
 
 			switch (args[i][1]) {
